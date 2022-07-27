@@ -1,21 +1,42 @@
-const WebSocketServer = require('ws').Server;
+const WebSocket = require('ws');
 const fs = require('fs');
 const PORT = 8080;
 var passwd = 'pa$$word' // should be get form db
+var path = require('path');
+const crypto = require('crypto');
 
 var http = require('http');
 var bodyparser = require('body-parser');
 var express = require('express');
-const { resolve } = require('path');
-const { rejects } = require('assert');
 var app = express();
 
 app.use(bodyparser.json());
+const DB_FILE_PATH = path.join('db', 'user.db');
 
 var server = new http.createServer({
 }, app);
 
-var wss = new WebSocketServer({
+const checkUser = function(id) {
+    return new Promise(function(resolve, reject) {
+        fs.readFile(DB_FILE_PATH, 'utf8', function(err, passFile) {
+            if (err) {
+                console.log(err);
+                resolve(false);
+            } else {
+                const lines = passFile.split('\n');
+
+                lines.forEach(function(line) {
+                    if (line.split(':')[0] === id) {
+                        resolve(line.split(':')[1]);
+                    }
+                });
+            }
+            resolve(false);
+        });
+    });
+};
+
+var wss = new WebSocket.Server({
     server,
     // verifyClient: (info, cb) => {
     //     // console.log(info.req.client);
@@ -28,19 +49,37 @@ var wss = new WebSocketServer({
         var success = !!info.req.client.authorized;
         console.log(success);
 
-        var authentication = Buffer.from(info.req.headers.authorization.replace(/Basic/, '').trim(),'base64').toString('utf-8');
+        var authentication = Buffer.from(info.req.headers.authorization,'base64').toString('utf-8');
+        var loginInfo = authentication.trim().split(':');
         if (!authentication)
             cb(false, 401, 'Authorization Required');
         else {
-            var loginInfo = authentication.trim().split(':');
-            if (loginInfo[1] != passwd) {
-                console.log("ERROR Username / Password NOT matched");
-                cb(false, 401, 'Authorization Required');
-            } else {
-                console.log("Username / Password matched");
-                info.req.identity = loginInfo[0];
-                cb(true, 200, 'Authorized');
-            }
+            checkUser(loginInfo[0]).then(function(hash) {
+
+                if(hash == false){
+                    console.log("ERROR Username NOT matched");
+                    cb(false, 401, 'Authorization Required');
+                }
+                else if(hash == loginInfo[1]){
+                    console.log("Username and Password matched");
+                    info.req.identity = loginInfo[0];
+                    info.req.hash = loginInfo[1];
+                    cb(true, 200, 'Authorized');
+                }
+                else{
+                    console.log("ERROR Password NOT matched");
+                    cb(false, 401, 'Authorization Required');
+                }
+            });
+            // var loginInfo = authentication.trim().split(':');
+            // if (loginInfo[1] != passwd) {
+            //     console.log("ERROR Username / Password NOT matched");
+            //     cb(false, 401, 'Authorization Required');
+            // } else {
+            //     console.log("Username / Password matched");
+            //     info.req.identity = loginInfo[0];
+            //     cb(true, 200, 'Authorized');
+            // }
         }
     }
 });
@@ -68,6 +107,8 @@ var wss = new WebSocketServer({
 
 wss.on('connection', function (ws, request) {
     ws.id = request.identity;
+    ws.pass = request.hash;
+
     console.log("Connected Charger ID: "  + ws.id);
 
     ws.on('message', function (msg) {
@@ -75,24 +116,30 @@ wss.on('connection', function (ws, request) {
         wss.clients.forEach(function (client) {
             if(client.id == request.identity){
                 console.log("From client",ws.id,": ", msg.toString());
-                client.send("Hello from server");
+                client.send(JSON.stringify("Hello from server"));
             };
         });
     });
 
     ws.on('close', function () {
-        console.log('Client disconnected '+ ws.id);
+        console.log(ws.id + ' Client disconnected');
     });
 
 });
 
-var check = function(clients, id){
+var check = function(clients, id, newhash){
     return new Promise(function(resolve, rejects){
         if(clients.size != 0){
             clients.forEach(function (client) {
                 if(client.id == id){
-                    client.send(id + " Disconnected");
-                    client.close();
+                    client.send(
+                        JSON.stringify({
+                            topic: "updatepass",
+                            id: client.id,
+                            newhash: newhash
+                        })
+                    );
+                    // client.close();
                     resolve(true);
                 }
                 else{
@@ -101,7 +148,7 @@ var check = function(clients, id){
             });
         }
         else{
-            resolve(false)
+            resolve(false);
         }
     });
 };
@@ -109,21 +156,43 @@ var check = function(clients, id){
 server.listen(PORT, ()=>{
 
     app.post('/test/', function(req, res) {
-        check(wss.clients, req.body.name).then(function(ack) {
+        var newhash = crypto.createHash('sha256').update(req.body.username + ':' + req.body.newpasswd).digest('hex');
+
+        check(wss.clients, req.body.username, newhash).then(function(ack) {
             if(ack){
                 res.json({
                     success: "true",
-                    result: req.body.name + " Client disconnected"
+                    result: req.body.username + " Client update password"
                 });
             }
             else{
                 res.json({
                     success: "fasle",
-                    result: req.body.name + " Client can not disconnect"
+                    result: req.body.username + " Client can not update password"
                 });
             }
         });
     });
+
+    // app.post('/updatepass/', function(req, res) {
+    //     console.log("Admin is requesting to update Basic auth password of client " + req.body.username);
+
+    //     var hash = crypto.createHash('sha256').update(req.body.username + ':' + req.body.passwd).digest('hex');
+    //     checkUser(hash).then(function(ack){
+    //         if(ack == true){
+    //             updatepass(req.body.username, req.body.newpasswd).then(function(ack){
+    //                 res.json({
+    //                     success: ack
+    //                 });
+    //             });
+    //         }
+    //         else{
+    //             res.json({
+    //                 success: "Auth fail"
+    //             });
+    //         }
+    //     });
+    // });
 
     console.log( (new Date()) + " Server is listening on port " + PORT);
 });
