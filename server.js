@@ -1,7 +1,6 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const PORT = 8080;
-var passwd = 'pa$$word' // should be get form db
 var path = require('path');
 const crypto = require('crypto');
 
@@ -38,13 +37,7 @@ const checkUser = function(id) {
 
 var wss = new WebSocket.Server({
     server,
-    // verifyClient: (info, cb) => {
-    //     // console.log(info.req.client);
-    //     var success = !!info.req.client.authorized;
-    //     console.log(success);
-    //     return success;
-    // }
-
+    // rejectUnauthorized: false,
     verifyClient: function (info, cb) {
         var success = !!info.req.client.authorized;
         console.log(success);
@@ -71,39 +64,9 @@ var wss = new WebSocket.Server({
                     cb(false, 401, 'Authorization Required');
                 }
             });
-            // var loginInfo = authentication.trim().split(':');
-            // if (loginInfo[1] != passwd) {
-            //     console.log("ERROR Username / Password NOT matched");
-            //     cb(false, 401, 'Authorization Required');
-            // } else {
-            //     console.log("Username / Password matched");
-            //     info.req.identity = loginInfo[0];
-            //     cb(true, 200, 'Authorized');
-            // }
         }
     }
 });
-
-// const wss = new WebSocketServer({
-//     port: PORT,
-//     verifyClient: function (info, cb) {
-//         var authentication = Buffer.from(info.req.headers.authorization.replace(/Basic/, '').trim(),'base64').toString('utf-8');
-//         if (!authentication)
-//             cb(false, 401, 'Authorization Required');
-//         else {
-//             var loginInfo = authentication.trim().split(':');
-//             if (loginInfo[1] != passwd) {
-//                 console.log("ERROR Username / Password NOT matched");
-//                 cb(false, 401, 'Authorization Required');
-//             } else {
-//                 console.log("Username / Password matched");
-//                 info.req.identity = loginInfo[0];
-//                 cb(true, 200, 'Authorized');
-//             }
-//         }
-//     },
-//     rejectUnauthorized: false
-// });
 
 wss.on('connection', function (ws, request) {
     ws.id = request.identity;
@@ -112,7 +75,6 @@ wss.on('connection', function (ws, request) {
     console.log("Connected Charger ID: "  + ws.id);
 
     ws.on('message', function (msg) {
-        // Broadcast message to all connected clients
         wss.clients.forEach(function (client) {
             if(client.id == request.identity){
                 console.log("From client",ws.id,": ", msg.toString());
@@ -139,7 +101,6 @@ var check = function(clients, id, newhash){
                             newhash: newhash
                         })
                     );
-                    // client.close();
                     resolve(true);
                 }
                 else{
@@ -154,7 +115,6 @@ var check = function(clients, id, newhash){
 };
 
 server.listen(PORT, ()=>{
-
     app.post('/test/', function(req, res) {
         var newhash = crypto.createHash('sha256').update(req.body.username + ':' + req.body.newpasswd).digest('hex');
 
@@ -173,26 +133,6 @@ server.listen(PORT, ()=>{
             }
         });
     });
-
-    // app.post('/updatepass/', function(req, res) {
-    //     console.log("Admin is requesting to update Basic auth password of client " + req.body.username);
-
-    //     var hash = crypto.createHash('sha256').update(req.body.username + ':' + req.body.passwd).digest('hex');
-    //     checkUser(hash).then(function(ack){
-    //         if(ack == true){
-    //             updatepass(req.body.username, req.body.newpasswd).then(function(ack){
-    //                 res.json({
-    //                     success: ack
-    //                 });
-    //             });
-    //         }
-    //         else{
-    //             res.json({
-    //                 success: "Auth fail"
-    //             });
-    //         }
-    //     });
-    // });
 
     console.log( (new Date()) + " Server is listening on port " + PORT);
 });
