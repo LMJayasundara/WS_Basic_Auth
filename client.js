@@ -46,7 +46,6 @@ function startWebsocket() {
                 perMessageDeflate: false,
                 headers: {
                     Authorization: Buffer.from(username + ':' + hash).toString('base64'),
-                    // Authorization: hash.toString('base64'),
                 },
             });
     
