@@ -12,6 +12,8 @@ var app = express();
 app.use(bodyparser.json());
 const DB_FILE_PATH = path.join('db', 'user.db');
 
+const wsEvents = require('ws-events');
+
 var server = new http.createServer({
 }, app);
 
@@ -69,6 +71,7 @@ var wss = new WebSocket.Server({
 });
 
 wss.on('connection', function (ws, request) {
+    const events = wsEvents(ws);
     ws.id = request.identity;
     ws.pass = request.hash;
 
@@ -85,6 +88,15 @@ wss.on('connection', function (ws, request) {
 
     ws.on('close', function () {
         console.log(ws.id + ' Client disconnected');
+    });
+
+    // ws.on('test', function(){
+    //     console.log('test');
+    // });
+    // ws.emit('test');
+
+    events.emit('hello', {
+        any: 'json'
     });
 
 });

@@ -7,6 +7,7 @@ const URL = "ws://127.0.0.1:8080/";
 const DB_FILE_PATH = path.join('user.db');
 
 var reconn = null;
+const wsEvents = require('ws-events')
 
 const gethash = function(id) {
     return new Promise(function(resolve, reject) {
@@ -30,10 +31,10 @@ const gethash = function(id) {
 
 const addUser = function(username, passhash) {
     return new Promise(function(resolve, reject) {
-        fs.unlinkSync(DB_FILE_PATH);
-        fs.ensureFileSync(DB_FILE_PATH);
-        passfile = username + ':' + passhash +'\n';
-        fs.writeFileSync(DB_FILE_PATH, passfile, 'utf8');
+        // fs.unlinkSync(DB_FILE_PATH);
+        // fs.ensureFileSync(DB_FILE_PATH);
+        // passfile = username + ':' + passhash +'\n';
+        // fs.writeFileSync(DB_FILE_PATH, passfile, 'utf8');
         resolve(true);
     });
 };
@@ -48,6 +49,8 @@ function startWebsocket() {
                     Authorization: Buffer.from(username + ':' + hash).toString('base64'),
                 },
             });
+
+            const wsx = wsEvents(ws);
     
             ws.on('open', function() {
                 clearInterval(reconn);
@@ -60,8 +63,14 @@ function startWebsocket() {
                 if(data.topic == "updatepass"){
                     console.log(data.id, data.newhash);
                     addUser(data.id, data.newhash).then(function(ack) {
-                        if(ack) ws.close();
-                        else console.log("Password not updated"); 
+                        if(ack) {
+                            ws.send("true");
+                            ws.close();
+                        }
+                        else {
+                            console.log("Password not updated"); 
+                            ws.send("false");
+                        }
                     });
                 }
                 else{
@@ -76,6 +85,11 @@ function startWebsocket() {
             ws.on('close', function() {
                 ws = null;
                 reconn = setTimeout(startWebsocket, 5000);
+            });
+
+            wsx.on('hello', (data) => {
+                console.log(data.any);
+                // ws.emit('world', 'Hello from a browser \\o')
             });
         }
         else{
